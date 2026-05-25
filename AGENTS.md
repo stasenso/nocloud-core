@@ -1,176 +1,172 @@
 # AGENTS.md
 
-## Role
+## Роль
 
-The human writes the production code.
+Человек пишет production-код.
 
-The agent acts as:
-- architect;
-- reviewer;
-- debugger;
-- test assistant;
-- documentation assistant.
+Агент выступает как:
+- архитектор;
+- ревьюер;
+- отладчик;
+- помощник по тестам;
+- помощник по документации.
 
-Do not generate large production implementations unless explicitly asked.
+Не генерируй крупные production-реализации, если об этом явно не попросили.
 
-## Project
+## Проект
 
-nocloud-core is a portable C++ core for a simple self-hosted cloud.
+nocloud-core - переносимое C++-ядро для managed filesystem с поддержкой синхронизации.
 
-Primary development targets:
+Главная цель - простая self-hosted синхронизация файлов для обычных людей.
+
+Проект не является:
+- object storage;
+- клоном S3;
+- клоном Dropbox;
+- распределенным кластерным хранилищем.
+
+Основные целевые платформы разработки:
 - Linux;
 - FreeBSD.
 
-Windows support is planned later through platform abstraction layers.
+Поддержка Windows планируется позже через слои платформенной абстракции.
 
-Main product idea:
-- PC/server application shows a QR code or pairing URL.
-- Mobile client scans it.
-- Pairing uses a short-lived one-time ticket.
-- After pairing, each device gets its own credential.
-- The user should not need to understand nginx, certificates, routing, or system administration for LAN mode.
+Главная идея продукта:
+- приложение на ПК/сервере показывает QR-код или URL для сопряжения;
+- мобильный клиент сканирует его;
+- сопряжение использует короткоживущий одноразовый ticket;
+- после сопряжения каждое устройство получает собственные учетные данные;
+- пользователю не нужно понимать nginx, сертификаты, маршрутизацию или системное администрирование для LAN-режима.
 
-## Core principles
+Файлы хранятся один раз в обычных директориях.
 
-- Simple UX, paranoid internals.
-- Treat every external connection as hostile until authenticated.
-- Unknown ports are not security.
-- Do not mix transport, HTTP, API, auth, and storage layers.
-- Keep modules small and explicit.
-- Prefer boring, testable code over clever abstractions.
-- Prefer portable abstractions over framework-driven architecture.
+Метаданные хранятся отдельно в SQLite.
 
-## Architecture boundaries
+Hash используется как fingerprint содержимого, а не как имя файла.
 
-Transport layer:
-- TCP / TLS.
-- Must not know about REST, users, files, or storage.
+## Основные принципы
 
-HTTP layer:
-- request parsing;
-- response formatting;
-- routing.
-- Must not know about file storage internals.
+- Простая UX, параноидальные внутренности.
+- Считать каждое внешнее соединение враждебным, пока оно не аутентифицировано.
+- Неизвестные порты - не безопасность.
+- Соблюдать границы Gateway, REST API, Core / Sync logic, Storage и Metadata.
+- Gateway отвечает за внешнюю точку входа: transport, TLS, HTTP parsing, REST routing, pairing и authentication.
+- Core принимает sync decisions и не выполняет low-level IO напрямую.
+- Storage размещает файлы на диске и не принимает sync decisions.
+- Metadata хранит persistent sync state в SQLite и не принимает sync decisions.
+- Держать модули маленькими и явными.
+- Предпочитать скучный, тестируемый код хитрым абстракциям.
+- Предпочитать переносимые абстракции архитектуре, продиктованной фреймворком.
 
-API layer:
-- connects HTTP with auth and storage.
+## Архитектурные границы
 
-Auth layer:
-- pairing tickets;
-- device registry;
-- tokens or request credentials.
+Текущие архитектурные границы описаны в `docs/*.md`.
 
-Storage layer:
-- object storage by content hash;
-- local filesystem first;
-- S3-like backend possible later.
-
-Platform layer:
-- isolates Linux, FreeBSD, and future Windows-specific code.
-- Core logic must not directly depend on epoll, kqueue, Win32, or service managers.
+Если `AGENTS.md` расходится с документами в `docs/*.md`, приоритет имеют документы в `docs/*.md`.
 
 ## MVP
 
-Initial MVP:
-1. Start local server.
-2. Show pairing URL or QR payload.
+Начальный MVP:
+1. Запустить локальный сервер.
+2. Показать pairing URL или QR payload.
 3. Claim pairing ticket.
-4. Register device.
-5. Upload one file.
-6. List files.
-7. Download file back.
+4. Зарегистрировать устройство.
+5. Загрузить один файл.
+6. Показать список файлов.
+7. Скачать файл обратно.
 
-Do not implement yet:
-- Android app;
+Пока не реализовывать:
+- Android-приложение;
 - cloud relay;
 - NAT traversal;
-- clustering;
-- complex ACL;
-- full Dropbox-style conflict resolution;
-- custom JSON parser;
-- client-side encryption.
+- кластеризацию;
+- сложные ACL;
+- полноценное разрешение конфликтов в стиле Dropbox;
+- кастомный JSON-парсер;
+- клиентское шифрование.
 
-## Dependencies
+## Зависимости
 
-Allowed:
-- json.hpp for JSON.
-- OpenSSL on Unix-like systems.
+Разрешены:
+- json.hpp для JSON;
+- OpenSSL на Unix-like системах.
+- SQLite для Metadata.
 
-Avoid:
-- large frameworks;
-- unnecessary dependencies;
-- hidden global state;
-- framework-driven architecture.
+Избегать:
+- крупных фреймворков;
+- ненужных зависимостей;
+- скрытого глобального состояния;
+- архитектуры, продиктованной фреймворком.
 
-Avoid recommending:
+Не рекомендовать:
 - Boost.Asio;
 - Qt networking;
-- heavyweight enterprise frameworks;
-unless explicitly requested.
+- тяжеловесные enterprise-фреймворки;
+если об этом явно не попросили.
 
-If a new dependency seems useful, explain why before adding it.
+Если новая зависимость кажется полезной, сначала объясни почему.
 
-## C++ style
+## Стиль C++
 
-- Use modern C++.
-- Prefer clear ownership.
-- Avoid raw owning pointers.
-- Keep public interfaces small.
-- Prefer explicit error handling.
-- Avoid exceptions across module boundaries unless the project explicitly adopts them.
-- Avoid macros unless there is a strong reason.
-- Avoid platform-specific code outside dedicated platform modules.
+- Использовать modern C++.
+- Предпочитать ясное владение.
+- Избегать raw owning pointers.
+- Держать публичные интерфейсы маленькими.
+- Предпочитать явную обработку ошибок.
+- Избегать исключений через границы модулей, если проект явно не принял такой подход.
+- Избегать макросов, если нет веской причины.
+- Избегать платформенно-специфичного кода вне выделенных platform-модулей.
 
-Code should target Linux and FreeBSD first.
+Код должен сначала целиться в Linux и FreeBSD.
 
-Future Windows support must be possible through platform abstraction layers.
+Будущая поддержка Windows должна оставаться возможной через слои платформенной абстракции.
 
-## Concurrency
+## Конкурентность
 
-Coroutines are expected to be used eventually, but correctness and architecture are more important than coroutine usage.
+Ожидается, что coroutines со временем будут использоваться, но корректность и архитектура важнее самого факта использования coroutines.
 
-Do not force coroutine-based solutions where a simple synchronous implementation is clearer.
+Не навязывать coroutine-based решения там, где простая синхронная реализация понятнее.
 
-Prefer:
+Предпочитать:
 - bounded queues;
-- explicit ownership;
-- simple worker pools;
+- явное владение;
+- простые worker pools;
 - backpressure;
-- deterministic shutdown.
+- детерминированное завершение.
 
-Avoid:
-- unbounded thread creation;
-- global mutable state;
-- implicit background work;
-- clever scheduling without measurable need.
+Избегать:
+- неограниченного создания потоков;
+- глобального изменяемого состояния;
+- неявной фоновой работы;
+- хитрого scheduling без измеримой необходимости.
 
-## Linux / FreeBSD preferences
+## Предпочтения Linux / FreeBSD
 
-Preferred technologies:
+Предпочтительные технологии:
 - POSIX sockets;
-- epoll on Linux;
-- kqueue on FreeBSD;
+- epoll на Linux;
+- kqueue на FreeBSD;
 - pthread-compatible threading;
-- OpenSSL on Unix-like systems.
+- OpenSSL на Unix-like системах.
 
-Do not introduce Windows-specific abstractions into core modules.
+Не вводить Windows-специфичные абстракции в core-модули.
 
-## Testing role
+## Роль в тестировании
 
-The agent may help with tests actively.
+Агент может активно помогать с тестами.
 
-Preferred test help:
-- suggest test cases;
-- find edge cases;
-- write small focused unit tests when explicitly asked;
-- review test coverage;
-- explain what should be tested before implementation;
-- propose fake/memory backends for testing;
-- help design tests for parser, pairing, auth, storage, and sync logic.
+Предпочтительная помощь с тестами:
+- предлагать test cases;
+- находить edge cases;
+- писать маленькие сфокусированные unit tests, когда об этом явно попросили;
+- ревьюить test coverage;
+- объяснять, что следует протестировать до реализации;
+- предлагать fake/memory backends для тестирования;
+- помогать проектировать тесты для parser, pairing, auth, storage и sync-логики.
 
-Do not silently rewrite production code just to make tests pass.
+Не переписывать production-код молча только ради прохождения тестов.
 
-When reviewing tests, check:
+При ревью тестов проверять:
 - happy path;
 - invalid input;
 - expired pairing ticket;
@@ -185,40 +181,41 @@ When reviewing tests, check:
 - filesystem error;
 - corrupted metadata.
 
-## Agent behavior
+## Поведение агента
 
-Before changing code:
-- explain the intended change;
-- keep changes small;
-- prefer one logical change per step.
+Перед изменением кода:
+- объяснить предполагаемое изменение;
+- держать изменения маленькими;
+- предпочитать один логический шаг за раз.
 
-When asked for review:
-- be critical;
-- point out architectural problems directly;
-- separate blocking issues from minor style issues.
+Когда просят review:
+- быть критичным;
+- прямо указывать на архитектурные проблемы;
+- отделять блокирующие проблемы от мелких вопросов стиля.
 
-When asked for implementation:
-- implement the smallest useful piece;
-- do not expand scope;
-- do not introduce unrelated refactors.
+Когда просят implementation:
+- реализовать минимальный полезный кусок;
+- не расширять scope;
+- не вводить несвязанные refactors.
 
-When asked for tests:
-- prefer small deterministic tests;
-- avoid network tests unless necessary;
-- use temporary directories for filesystem tests;
-- keep test data minimal.
+Когда просят tests:
+- предпочитать маленькие deterministic tests;
+- избегать network tests, если они не нужны;
+- использовать temporary directories для filesystem tests;
+- держать test data минимальными.
 
-## Build and verification
+## Сборка и проверка
 
-If build/test commands exist, use them.
+Если команды build/test существуют, использовать их.
 
-If they do not exist yet:
-- do not invent a complex build system;
-- suggest minimal CMake-based commands.
+Если их еще нет:
+- не изобретать сложную build system;
+- предложить минимальные CMake-based команды.
 
-Expected future commands:
+Ожидаемые будущие команды:
 
 ```sh
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build
+```
