@@ -7,7 +7,7 @@ fn handle_client (mut stream: TcpStream) {
     println!("Handling connection from: {}", peer_addr);
 
     let mut buffer = [0;1024];
-
+    let prefix = "Сам ты ".as_bytes();
     loop {
         match stream.read(&mut buffer) {
             Ok(n) => {
@@ -16,7 +16,18 @@ fn handle_client (mut stream: TcpStream) {
                     break;
                 }
                 
-                if let Err (e) = stream.write_all(&buffer) {
+                println!("Мне прислали: {}",String::from_utf8_lossy(&buffer[..n]));
+
+                let prefix = "Сам ты ".as_bytes();
+
+                if n + prefix.len() > buffer.len() {
+                    eprintln!("Слишком длинное сообщение от {}", peer_addr);
+                    break;
+                }
+                buffer.copy_within(0..n, prefix.len());
+                buffer[..prefix.len()].copy_from_slice(prefix);
+
+                if let Err (e) = stream.write_all(&buffer[..n + prefix.len()]) {
                     eprintln!("Write error to client {}: {}", peer_addr, e
                 );
                 break;
@@ -45,7 +56,7 @@ fn handle_client (mut stream: TcpStream) {
 fn main() {
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(||"127.0.0.1:32768".to_string());
+        .unwrap_or_else(||"192.168.1.152:32768".to_string());
 
     let listener = TcpListener::bind(&addr)
         .expect("Failed to bind to address");
