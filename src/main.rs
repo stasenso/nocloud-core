@@ -7,7 +7,6 @@ fn handle_client (mut stream: TcpStream) {
     println!("Handling connection from: {}", peer_addr);
 
     let mut buffer = [0;1024];
-    let prefix = "Сам ты ".as_bytes();
     loop {
         match stream.read(&mut buffer) {
             Ok(n) => {
