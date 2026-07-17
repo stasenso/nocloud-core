@@ -5,13 +5,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+use local_ip_address::local_ip;
+use std::net::{IpAddr, Ipv4Addr};
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let listener = TcpListener::bind("192.168.1.152:32768").await?;
+    let my_ip: IpAddr = local_ip().unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+    let listener = TcpListener::bind((my_ip,32768)).await?;
 
-    println!("Сервер слушает 192.168.1.152:32768");
+    println!("Сервер слушает {}:32768",my_ip);
 
     loop {
         let (stream, client_addr) = listener.accept().await?;
