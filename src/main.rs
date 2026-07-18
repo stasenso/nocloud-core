@@ -1,5 +1,5 @@
-mod connection;
-mod protocol;
+mod connection; //модуль отвечающий за соединения
+mod protocol; //модуль отвечающий за протокол
 
 use tokio::net::{TcpListener};
 use tokio::io;
