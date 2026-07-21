@@ -1,4 +1,27 @@
+// Парсим заголовок на базе Nom
+use nom::{
+    bytes::complete::tag,
+    combinator::verify,
+    number::complete::{
+        be_u8,
+        be_u16,
+        be_u32,
+        be_u64,
+    },
+    IResult,
+    Parser,
+};
+
 use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum HeaderValidationError {
+    #[error("Неподдерживаемая версия протокола: {0}")]
+    UnsupportedVersion(u8),
+
+    #[error("Неизвестная команда протокола: {0}")]
+    UnsupportedCommand(u8),
+}
 
 #[derive(Debug)]
 pub struct Header {
@@ -9,46 +32,27 @@ pub struct Header {
     body_size: u64,
 }
 
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error("Заголовок пустой или имеет неверный формат")]
-    InvalidFormat,
-    #[error("Длина имени файла ({actual}) превышает допустимый лимит в {max} байт")]
-    FilenameTooLong {
-    actual: u16,
-    max: u16,
-}   
-}
-
-pub async fn parce_header (bytes: &[u8;20]) -> Result<Header, ParseError> {
-    // Получаем флаги
-    let flags_raw = u16::from_be_bytes([bytes[6],bytes[7]]);
-    let request_id_raw = u32::from_be_bytes([bytes[8],bytes[9],bytes[10],bytes[11]]);
-    let body_size_raw = u64::from_be_bytes([bytes[12],bytes[13],bytes[14],bytes[15],bytes[16],bytes[17],bytes[18],bytes[19]]);
-    // Валидация номера версии, magic и команды
-    let [
-        b'1'..=b'3', 
-        b'N', b'C', b'L', b'D', 
-        _cmd @ (1..=4 | 80 | 81),
-        _, _, 
-        ..
-    ] = bytes else {
-        return Err(ParseError::InvalidFormat);
-    };
-    // Валидация флагов
-    if (flags_raw & 0xFFF8) !=0 {
-        return Err(ParseError::InvalidFormat);
-    }
-
+pub fn parse_header(
+    input: &[u8],
+    ) -> IResult<&[u8],Header> {
+    //1. Парсим магические байты "NCLD"
+    let (input, _) = tag(&b"NCLD"[..]).parse(input)?;
+    //2. Парсим и валидируем версию
+    let (input, version) = be_u8(input)?;
+    //3. Парсим и валидируем Header 
+    let (input, command) = be_u8(input)?;
+    let (input, flags) = be_u16(input)?;
+    let (input, request_id) = be_u32(input)?;
+    let (input, body_size) = be_u64(input)?;
 
     let local_header = Header{
-        version: bytes[0],
-        command: *_cmd,
-        flags: flags_raw,
-        request_id: request_id_raw,
-        body_size: body_size_raw,
+        version,
+        command,
+        flags,
+        request_id,
+        body_size,
     };
-    Ok(local_header)
+    Ok((input,local_header))
 }
 
 // Реализация публичных методов-геттеров для безопасного доступа к приватным полям
@@ -78,4 +82,20 @@ impl Header {
     pub fn body_size(&self) -> u64 {
         self.body_size
     }
+    // Валидация Header
+    pub fn validate(&self) -> Result<(), HeaderValidationError> {
+    if self.version != 1 {
+        return Err(
+            HeaderValidationError::UnsupportedVersion(self.version)
+        );
+    }
+
+    if self.command != 1 {
+        return Err(
+            HeaderValidationError::UnsupportedCommand(self.command)
+        );
+    }
+
+    Ok(())
+}
 }

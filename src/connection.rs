@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream};
 use std::io;
 
-use crate::protocol::{parce_header, ParseError}; 
+use crate::protocol::parse_header; 
 pub struct Connection {
     id: u64,
     client_addr: SocketAddr,
@@ -54,25 +54,54 @@ impl Connection {
         }
 
         // 3. Вызываем ваш парсер заголовка
-        let header = match parce_header(&header_buffer).await {
-            Ok(h) => h,
-            Err(ParseError::InvalidFormat) => {
-                println!("Обработчик {}: Критическая ошибка! Неверный формат заголовка.", self.id);
-                // В сетевых протоколах при неверном заголовке соединение обычно сразу рвут
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid header format"));
+        let header = match parse_header(&header_buffer) {
+            Ok((_remaining, header)) => {
+                println!(
+                    "Обработчик {}: nom оставил {} байт",
+                    self.id,
+                    _remaining.len()
+                );
+                header
             }
-            // Если вы добавите новые ошибки, например FilenameTooLong:
-            Err(e) => {
-                println!("Обработчик {}: Ошибка парсинга: {}", self.id, e);
-                return Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
-            }
-        };
+               
+            Err(error) => {
+                println!(
+                    "Обработчик {}: ошибка парсинга заголовка: {:?}",
+                    self.id, error
+                );
 
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid header: {error:?}"),
+        ));
+    }
+};
+
+// 
+if let Err(error) = header.validate() {
+    return Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        error,
+    ));
+}
         self.message_count += 1;
         println!("Обработчик {}: Успешно распарсен заголовок №{}: {:?}", self.id, self.message_count, header);
 
         // 4. Используем данные из распарсенного заголовка!
         // Теперь мы знаем точный размер тела сообщения благодаря header.body_size
+        const MAX_BODY_SIZE: u64 = 1024 * 1024; // 1 МиБ
+
+        if header.body_size() > MAX_BODY_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Размер тела {} превышает лимит {}",
+                    header.body_size(),
+                    MAX_BODY_SIZE,
+                ),
+            ));
+        }
+
         let body_len = header.body_size() as usize;
         
         // Подгоняем размер буфера под размер тела (чтобы не читать лишнего)
